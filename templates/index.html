@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>用FocusSearch+ClickHouse打造极致的数据分析速度</title>
+    <script src="https://cloud.datafocus.ai/embeddedSearchSql/focus.embedded.search.sql.js"></script>
+</head>
+<body>
+<div id="search-sql-container"></div>
+<p id="sql" style="font-size: 18px"></p>
+<table id="result" style="font-size: 18px;" border="1" cellspacing="1" cellpadding="5"></table>
+</body>
+<script type="text/javascript">
+    let xhr = new XMLHttpRequest();
+    var dfToken;
+    var tenantId;
+    var cost_time;
+    xhr.open("POST", "/token", true);
+    xhr.setRequestHeader("Content-type", "application/json");
+    xhr.onreadystatechange = function () {
+        let XMLHttpReq = xhr;
+        if (XMLHttpReq.readyState == 4 && XMLHttpReq.status == 200) {
+            let response = JSON.parse(XMLHttpReq.responseText);
+            console.log(response);
+            dfToken = response.data.dfToken
+            tenantId = response.data.tenantId
+
+            let dataFocusSearchSql = new _DataFocusSearchSql({
+                containerId: 'search-sql-container',        //  需要将搜索框放入的区域 (必填项)
+                protocol: 'https:',                            //  您使用的DataFocus系统的协议(必填项)
+                host: 'cloud.datafocus.ai',                    //  您使用的DataFocus系统的域名或IP地址(必填项)
+                platform: 'pc',                             //  您当前嵌入的系统平台 pc是电脑端(默认值)，mobile是移动端
+                showVoiceButton: true,                     //  mobile移动端平台下，是否显示语音按钮，默认不显示
+                dfToken: dfToken,                               //  您使用的DataFocus系统中secretId,secretKey调用以下接口获取的连接标识(必填项)
+                tenantId: tenantId,            //  您使用的DataFocus系统的租户号(非必填项 ， 默认是10001租户)
+
+                registerModel: {
+                    type: 'clickhouse',                            //  [* 必填项]     数据库类型
+                    version: '8.0',                        //  [* 必填项]     数据库版本
+                    tables: [
+                        {
+                            tableDisplayName: '电商销售数据',
+                            tableName: '电商销售数据',
+                            columns: [
+                                {
+                                    columnDisplayName: '区域',
+                                    columnName: '区域',
+                                    dataType: 'string',
+                                    aggregation: ''
+                                },
+                                {
+                                    columnDisplayName: '目的省份',
+                                    columnName: '目的省份',
+                                    dataType: 'string',
+                                    aggregation: ''
+                                },
+                                {
+                                    columnDisplayName: '产品名称',
+                                    columnName: '产品名称',
+                                    dataType: 'string',
+                                    aggregation: ''
+                                },
+                                {
+                                    columnDisplayName: '产品子类别',
+                                    columnName: '产品子类别',
+                                    dataType: 'string',
+                                    aggregation: ''
+                                },
+                                {
+                                    columnDisplayName: '订单日期',
+                                    columnName: '订单日期',
+                                    dataType: 'timestamp',
+                                    aggregation: ''
+                                },
+                                {
+                                    columnDisplayName: '销售数量',
+                                    columnName: '销售数量',
+                                    dataType: 'int',
+                                    aggregation: 'SUM'
+                                },
+                                {
+                                    columnDisplayName: '销售金额',
+                                    columnName: '销售金额',
+                                    dataType: 'double',
+                                    aggregation: 'SUM'
+                                }
+                            ]
+                        }
+                    ],                                        //  [* 必填项]     数据库表
+                    relations: [],                                      //  [非必填项]     数据表的关联关系
+                },
+
+                onChangeQuestion: function(searchText){
+                    console.log('修改问题拉啊拉~~~');
+                    cost_time = (new Date()).valueOf();
+                } ,
+
+                onReturnData: function (data) {
+                    console.log(data)
+                    let xhr = new XMLHttpRequest();
+                    cost_time = (new Date()).valueOf() - cost_time;
+                    console.log("解析完成花费时间："+cost_time);
+                    cost_time = (new Date()).valueOf();
+                    xhr.open("POST", "/sql", true);
+                    xhr.setRequestHeader("Content-type", "application/json");
+                    xhr.onreadystatechange = function () {
+                        let XMLHttpReq = xhr;
+                        if (XMLHttpReq.readyState == 4 && XMLHttpReq.status == 200) {
+                            let response = JSON.parse(XMLHttpReq.responseText);
+                            console.log(response.data.sql);
+                            document.getElementById("sql").innerText = response.data.sql;
+                            cost_time = (new Date()).valueOf() - cost_time;
+                            console.log("获取sql接口："+cost_time);
+                            cost_time = (new Date()).valueOf();
+                            let xhr = new XMLHttpRequest();
+                            xhr.open("POST", "/query", true);
+                            xhr.setRequestHeader("Content-type", "application/json");
+                            xhr.onreadystatechange = function () {
+                                let XMLHttpReq = xhr;
+                                if (XMLHttpReq.readyState == 4 && XMLHttpReq.status == 200) {
+                                    let response = JSON.parse(XMLHttpReq.responseText);
+                                    console.log(response);
+                                    let result = response.result
+                                    let html = ""
+                                    for(let i=0;i<result.length;i++){
+                                        html+="<tr>"
+                                        for(let j=0;j<result[i].length;j++){
+                                            html+="<td>"+result[i][j]+"</td>";
+                                        }
+                                        html+="</tr>"
+                                    }
+                                    document.getElementById("result").innerHTML=html;
+                                    cost_time = (new Date()).valueOf() - cost_time;
+                                    console.log("获取结果："+cost_time);
+                                }
+                            }
+                            xhr.send(JSON.stringify({"sql": response.data.sql}));
+                        }
+                    }
+                    let postData = {"identity": data.identity};
+                    xhr.send(JSON.stringify(postData));
+                }
+            });
+        }
+    }
+    xhr.send();
+</script>
+</html>
